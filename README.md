@@ -1,10 +1,8 @@
 ## timed_feedforward_control
 
-This repository contains code to run the simulations and create the figures for the paper:
+This repository contains code to run the simulations and create the figures for:
 
-Mohren T.L., Daniel T.L. and Brunton S.L., 2019. Learning Precisely Timed Feedforward Control of the Sensor-Denied Inverted Pendulum. (in review)
-
-arXiv preprint: https://arxiv.org/abs/1912.04922
+[Mohren, T. L., Daniel, T. L., & Brunton, S. L. (2020). Learning Precisely Timed Feedforward Control of the Sensor-Denied Inverted Pendulum. IEEE Control Systems Letters.](https://ieeexplore.ieee.org/abstract/document/9044302)
 
 
 ### Folder structure:
