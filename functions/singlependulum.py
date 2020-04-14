@@ -2,6 +2,10 @@ import numpy as np
 from operator import sub
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
+from scipy.integrate import odeint  
+import time    
+
+import scipy.interpolate as interp  
 
 def pendulum_ode(y_n,t, u_n= 0  ,time_sign = 1, b =0.0   ): 
     g = -10. 
@@ -77,3 +81,152 @@ def matrix_fillnan(Mat):
     
     Mat_log = np.log(Mat_clean + 1 - Mat_clean.min())   
     return Mat_clean, Mat_log 
+
+
+def compute_U(J_use,x_space,y_space, X,Y, u_opts, tU,Q,R ) :
+    U = np.full( np.shape(J_use), np.nan  )
+    Eff = np.full( np.shape(J_use), np.nan  )
+    t_start = time.time()  
+
+    # spline = interp.interp2d( x_space,y_space,J_use.transpose().ravel() ,kind = 'cubic' )   
+    spline = interp.interp2d( x_space,y_space,J_use.transpose().ravel() ,kind = 'linear' )  # works 
+
+    for j in range(len(x_space)):
+        for k in range(len(y_space)): 
+            yi = np.array( [X[k,j] , Y[k,j]] ) 
+            Ji = J_use[k,j ]
+
+            dE_0 =   compute_dE(yi[0],yi[1])
+            cost_new_place = np.zeros( np.shape(u_opts) )   
+
+            dE_n = np.zeros( np.shape(u_opts) )   
+            for jj, u_c in enumerate(u_opts, start=0):  
+                #----------------solve simulation 
+                y_n  = odeint(   pendulum_ode, yi,  tU, args=(u_c,)  )[1]    # ode solver 
+                y_n[0] =  wrap2periodic(y_n[0],2*np.pi, 0 )                  # wrap theta to range of -pi to pi 
+
+                # find cost of the step
+                J_n  =  calc_costToGo(yi,u_c, Q,R )  * tU[1] 
+
+                # find the effective change of the step
+                dE_n[jj] =   compute_dE(y_n[0],y_n[1])
+
+                # compute cost at new step
+                cost_new_place[jj] = spline( y_n[0],y_n[1]  )   + J_n
+
+            # compare costs and find which control action is cheapest
+            ind_low = np.argmin(cost_new_place)  
+            U[k,j] = u_opts[ind_low]  
+            Eff[k,j] = dE_n[ind_low] 
+    return U 
+
+
+def eval_control_cost( x0 ,y0 ) : 
+    t1 = x0[0]
+    tau = x0[1]  
+    
+    # sim parameters 
+    dt = 0.001; 
+    tLast = 2. 
+    
+    n_steps = np.int(tLast/dt) 
+    t = np.array([0,dt])  
+    tInt = np.arange(0,tLast+dt, dt) ;
+    
+    vis_limit = 0.3
+    visible_x = wrap2periodic( np.array([-1,1])*vis_limit + np.pi, 2*np.pi, np.pi  ) 
+
+
+    Q = 1.
+    R = 100.   
+    un = 0
+    time_sign = 1 
+    err_factor = 1e7
+    y = []     # initialize lists  
+    u = [] 
+    
+    for j in range(n_steps):
+        y.append(y0)  
+        u.append(un)     
+        t_sim = tInt[j]
+        if   (t_sim> t1) & (t_sim< (t1+np.abs(tau) )) :
+            un = -3
+        else: 
+            un = 0 
+        y1 = odeint(   pendulum_ode, y0,  t, args=(un ,time_sign,)  )[1]     # ode solver 
+        y1[0] =  wrap2periodic(y1[0]) 
+         
+        y0 = y1  
+        
+        if y1[0] > visible_x[0]:              
+            break 
+            
+    # compute cost
+    E =  compute_dE( np.array(y)[:,0], np.array(y)[:,1] ) 
+    U = np.array(u)  
+    e_error = np.abs(E[-1]) 
+    if e_error < 0.3:
+        e_error = 0  
+        
+    J = np.sum( E**2*Q+ U**2*R)  + err_factor*e_error
+    t_list = tInt[:(j+1)] 
+      
+    return J, t_list, np.array(y), U   
+
+def run_sim_opt( x0, y0 ) : 
+    t1 = x0[0]
+    tau = x0[1]  
+
+    vis_limit = 0.3
+    visible_x = wrap2periodic( np.array([-1,1])*vis_limit + np.pi, 2*np.pi, np.pi  ) 
+
+    
+    dth_LQR_limit = np.array([ 0 , 1.88])
+    
+    # sim parameters 
+    dt = 0.001; 
+    tLast = 2. 
+    n_steps = np.int(tLast/dt) 
+    t = np.array([0,dt])  
+    tInt = np.arange(0,tLast+dt, dt) ;
+    
+    Q = 1.
+    R = 100.  
+    un = 0   
+    err_factor = 1e7
+    time_sign = 1 
+    y = []
+    u = []   # initialize lists 
+    
+    for j in range(n_steps):
+        y.append(y0)  
+        u.append(un)     
+        t_sim = tInt[j]
+        if  (t_sim> t1) & (t_sim< (t1+ np.abs(tau) )) :
+            un = -3
+        else: 
+            un = 0 
+        y1 = odeint(   pendulum_ode, y0,  t, args=(un ,time_sign,)  )[1]     # ode solver 
+        y1[0] =  wrap2periodic(y1[0]) 
+         
+        y0 = y1   
+        if y1[0] > visible_x[0]:              
+            break  
+            
+    
+    # compute cost
+    LQR_conv_bool = (y1[0] > dth_LQR_limit[0] ) &   (y1[1] < dth_LQR_limit[1] )
+    
+    E =  compute_dE( np.array(y)[:,0], np.array(y)[:,1] )
+    U = np.array(u) 
+    
+    e_error = np.abs(E[-1])  
+    LQR_conv_bool = (y1[0] > dth_LQR_limit[0] ) &   (y1[1] < dth_LQR_limit[1] )
+         
+    if  LQR_conv_bool:
+        e_error = 0  
+    J = np.sum( E**2*Q+ U**2*R)  + err_factor*e_error 
+ 
+     
+    return J  
+

@@ -170,5 +170,4 @@ def save_fig( figs_dir, fig_name ):
             format='pdf',  transparent= True, 
             bbox_inches = 'tight', pad_inches = 0,
             )  
-    plt.close()
-
+    plt.close() 
