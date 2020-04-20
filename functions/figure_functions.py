@@ -157,17 +157,17 @@ def plot_state_space(ax_p, x_lim = (-7.5,7.5), y_lim= (-2*np.pi,2*np.pi) ,
     ax_p.xaxis.set_major_formatter(plt.FuncFormatter(phd.multiple_formatter()))  
     ax_p.yaxis.set_major_locator( plt.MultipleLocator(6) ) 
 
-def save_fig( figs_dir, fig_name ): 
+def save_fig(fig, figs_dir, fig_name ): 
     
     fig_fullname = os.path.join( figs_dir, fig_name ) 
     print('Saving to: ' + fig_fullname + '.png and .pdf') 
-    plt.savefig( fig_fullname+ '.png',
+    fig.savefig( fig_fullname+ '.png',
             format='png', dpi=300,
             transparent=  True,             
             bbox_inches = 'tight', pad_inches = 0, 
                )
-    plt.savefig( fig_fullname + '.pdf',
+    fig.savefig( fig_fullname + '.pdf',
             format='pdf',  transparent= True, 
             bbox_inches = 'tight', pad_inches = 0,
             )  
-    plt.close() 
+    # plt.close() 
